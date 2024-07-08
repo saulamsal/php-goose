@@ -2,7 +2,16 @@
     "name": "saulamsal/php-goose",
     "type": "library",
     "description": "Readability / Html Content / Article Extractor & Web Scrapping library written in PHP",
-    "keywords": ["scraper", "http", "extractor", "text", "content", "scraping", "website", "readability"],
+    "keywords": [
+        "scraper",
+        "http",
+        "extractor",
+        "text",
+        "content",
+        "scraping",
+        "website",
+        "readability"
+    ],
     "homepage": "https://github.com/saulamsal/php-goose",
     "license": "Apache-2.0",
     "authors": [
@@ -12,13 +21,7 @@
         }
     ],
     "require": {
-        "php": ">=8.0.0",
-        "ext-mbstring": "*",
-        "ext-libxml": "*",
-        "lib-libxml": ">=2.7.7",
-        "guzzlehttp/guzzle": "^7.0",
-        "jakeasmith/http_build_url": "^1.0",
-        "scotteh/php-dom-wrapper": "^3.0"
+        "php": ">=8.0.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0 || ^10.0"
@@ -31,11 +34,6 @@
     "autoload-dev": {
         "psr-4": {
             "Goose\\Tests\\": "tests/"
-        }
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-master": "1.0-dev"
         }
     }
 }

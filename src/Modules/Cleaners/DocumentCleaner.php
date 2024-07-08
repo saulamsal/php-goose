@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Goose\Modules\Cleaners;
 
@@ -13,7 +15,8 @@ use DOMWrap\{Text, Element, NodeList};
  * @package Goose\Modules\Cleaners
  * @license http://www.apache.org/licenses/LICENSE-2.0 Apache License 2.0
  */
-class DocumentCleaner extends AbstractModule implements ModuleInterface {
+class DocumentCleaner extends AbstractModule implements ModuleInterface
+{
     use DocumentMutatorTrait;
 
     /** @var array Element id/class/name to be removed that start with */
@@ -58,11 +61,12 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @inheritdoc
      */
-    public function run(Article $article): self {
+    public function run(Article $article): self
+    {
         $this->document($article->getDoc());
 
         $this->removeXPath('//comment()');
-        $this->replace('em, strong, b, i, strike, del, ins', function($node) {
+        $this->replace('em, strong, b, i, strike, del, ins', function ($node) {
             return !$node->find('img')->count();
         });
         $this->replace('span[class~=dropcap], span[class~=drop_cap]');
@@ -75,13 +79,13 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
         $this->remove("[id*='facebook']:not([id*='-facebook']),[class*='facebook']:not([class*='-facebook'])");
         $this->remove("[id*='facebook-broadcasting'],[class*='facebook-broadcasting']");
         $this->remove("[id*='twitter']:not([id*='-twitter']),[class*='twitter']:not([class*='-twitter'])");
-        $this->replace('span', function($node) {
+        $this->replace('span', function ($node) {
             if (is_null($node->parent())) {
                 return false;
             }
-
             return $node->parent()->is('p');
         });
+
         $this->convertToParagraph('div, span, article');
 
         return $this;
@@ -95,7 +99,8 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self
      */
-    private function remove(string $selector, callable $callback = null): self {
+    private function remove(string $selector, callable $callback = null): self
+    {
         $nodes = $this->document()->find($selector);
 
         foreach ($nodes as $node) {
@@ -115,7 +120,8 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self
      */
-    private function removeXPath(string $expression, callable $callback = null): self {
+    private function removeXPath(string $expression, callable $callback = null): self
+    {
         $nodes = $this->document()->findXPath($expression);
 
         foreach ($nodes as $node) {
@@ -135,7 +141,8 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self
      */
-    private function replace(string $selector, callable $callback = null): self {
+    private function replace(string $selector, callable $callback = null): self
+    {
         $nodes = $this->document()->find($selector);
 
         foreach ($nodes as $node) {
@@ -152,7 +159,8 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self
      */
-    private function removeBadTags(): self {
+    private function removeBadTags(): self
+    {
         $lists = [
             "[%s^='%s']" => $this->startsWithNodes,
             "[%s*='%s']" => $this->searchNodes,
@@ -166,7 +174,7 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
             'name',
         ];
 
-        $exceptions = array_map(function($value) {
+        $exceptions = array_map(function ($value) {
             return ':not(' . $value . ')';
         }, $this->exceptionSelectors);
 
@@ -194,25 +202,40 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self|null
      */
-    private function replaceElementsWithPara(Element $node): ?self {
-        // Check to see if the node no longer exist.
-        // 'Ghost' nodes have their ownerDocument property set to null - will throw a warning on access.
-        // Use another common property with isset() - won't throw any warnings.
-        if (!isset($node->nodeName)) {
+    private function replaceElementsWithPara(Element $node): ?self
+    {
+        try {
+            // Check to see if the node no longer exists.
+            if (!isset($node->nodeName)) {
+                return null;
+            }
+
+            $document = $this->document();
+            if (!$document instanceof \DOMWrap\Document) {
+                return null;
+            }
+
+            $newEl = $document->createElement('p');
+            if (!$newEl) {
+                return null;
+            }
+
+            $contents = $node->contents();
+            if ($contents) {
+                $newEl->appendWith($contents->detach());
+            }
+
+            foreach ($node->attributes as $attr) {
+                $newEl->attr($attr->localName, $attr->nodeValue);
+            }
+
+            $node->substituteWith($newEl);
+
+            return $this;
+        } catch (\Throwable $e) {
+            // Silently fail and return null
             return null;
         }
-
-        $newEl = $this->document()->createElement('p');
-
-        $newEl->appendWith($node->contents()->detach());
-
-        foreach ($node->attributes as $attr) {
-            $newEl->attr($attr->localName, $attr->nodeValue);
-        }
-
-        $node->substituteWith($newEl);
-
-        return $this;
     }
 
     /**
@@ -222,23 +245,46 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return self
      */
-    private function convertToParagraph(string $selector): self {
-        $nodes = $this->document()->find($selector);
-
-        foreach ($nodes as $node) {
-            $tagNodes = $node->find('a, blockquote, dl, div, img, ol, p, pre, table, ul');
-
-            if (!$tagNodes->count()) {
-                $this->replaceElementsWithPara($node);
-            } else {
-                $replacements = $this->getReplacementNodes($node);
-
-                $node->contents()->destroy();
-                $node->appendWith($replacements);
+    private function convertToParagraph(string $selector): ?self
+    {
+        try {
+            $document = $this->document();
+            if (!$document instanceof \DOMWrap\Document) {
+                return null;
             }
-        }
 
-        return $this;
+            $nodes = $document->find($selector);
+            if ($nodes === null || $nodes->count() === 0) {
+                return null;
+            }
+
+            foreach ($nodes as $node) {
+                if (!$node instanceof Element) {
+                    continue;
+                }
+
+                $tagNodes = $node->find('a, blockquote, dl, div, img, ol, p, pre, table, ul');
+
+                if ($tagNodes === null || $tagNodes->count() === 0) {
+                    $result = $this->replaceElementsWithPara($node);
+                    if ($result === null) {
+                        // Handle the failure if needed
+                        continue;
+                    }
+                } else {
+                    $replacements = $this->getReplacementNodes($node);
+                    if ($replacements !== null) {
+                        $node->contents()->destroy();
+                        $node->appendWith($replacements);
+                    }
+                }
+            }
+
+            return $this;
+        } catch (\Throwable $e) {
+            // Silently fail and return null
+            return null;
+        }
     }
 
     /**
@@ -248,7 +294,8 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return Element
      */
-    private function getFlushedBuffer(NodeList $replacementNodes): Element {
+    private function getFlushedBuffer(NodeList $replacementNodes): Element
+    {
         $newEl = $this->document()->createElement('p');
         $newEl->appendWith($replacementNodes);
 
@@ -262,73 +309,69 @@ class DocumentCleaner extends AbstractModule implements ModuleInterface {
      *
      * @return NodeList $nodesToReturn Replacement elements
      */
-    private function getReplacementNodes(Element $node): NodeList {
-        $nodesToReturn = $node->newNodeList();
-        $nodesToRemove = $node->newNodeList();
-        $replacementNodes = $node->newNodeList();
+    private function getReplacementNodes(Element $node): ?NodeList
+    {
+        try {
+            $nodesToReturn = $node->newNodeList();
+            $nodesToRemove = $node->newNodeList();
+            $replacementNodes = $node->newNodeList();
 
-        $fnCompareSiblingNodes = function($node) {
-            if ($node->is(':not(a)') || $node->nodeType == XML_TEXT_NODE) {
-                return true;
-            }
-        };
+            $fnCompareSiblingNodes = function ($node) {
+                return $node->is(':not(a)') || $node->nodeType == XML_TEXT_NODE;
+            };
 
-        foreach ($node->contents() as $child) {
-            if ($child->is('p') && $replacementNodes->count()) {
-                $nodesToReturn[] = $this->getFlushedBuffer($replacementNodes);
-                $replacementNodes->fromArray([]);
-                $nodesToReturn[] = $child;
-            } else if ($child->nodeType == XML_TEXT_NODE) {
-                $replaceText = $child->text();
-
-                if (!empty($replaceText)) {
-                    // Get all previous sibling <a> nodes, the current text node, and all next sibling <a> nodes.
-                    $siblings = $child
-                        ->precedingUntil($fnCompareSiblingNodes, 'a')
-                        ->merge([$child])
-                        ->merge($child->followingUntil($fnCompareSiblingNodes, 'a'));
-
-                    foreach ($siblings as $sibling) {
-                        // Place current nodes textual contents in-between previous and next nodes.
-                        if ($sibling->isSameNode($child)) {
-                            $replacementNodes[] = new Text($replaceText);
-
-                        // Grab the contents of any unprocessed <a> siblings and flag them for removal.
-                        } else if ($sibling->getAttribute('grv-usedalready') != 'yes') {
-                            $sibling->setAttribute('grv-usedalready', 'yes');
-
-                            $replacementNodes[] = $sibling->cloneNode(true);
-                            $nodesToRemove[] = $sibling;
-                        }
-
-                    }
-                }
-
-                $nodesToRemove[] = $child;
-            } else {
-                if ($replacementNodes->count()) {
+            foreach ($node->contents() as $child) {
+                if ($child->is('p') && $replacementNodes->count()) {
                     $nodesToReturn[] = $this->getFlushedBuffer($replacementNodes);
                     $replacementNodes->fromArray([]);
+                    $nodesToReturn[] = $child;
+                } else if ($child->nodeType == XML_TEXT_NODE) {
+                    $replaceText = $child->text();
+
+                    if (!empty($replaceText)) {
+                        $siblings = $child
+                            ->precedingUntil($fnCompareSiblingNodes, 'a')
+                            ->merge([$child])
+                            ->merge($child->followingUntil($fnCompareSiblingNodes, 'a'));
+
+                        foreach ($siblings as $sibling) {
+                            if ($sibling->isSameNode($child)) {
+                                $replacementNodes[] = new Text($replaceText);
+                            } else if ($sibling->getAttribute('grv-usedalready') != 'yes') {
+                                $sibling->setAttribute('grv-usedalready', 'yes');
+                                $replacementNodes[] = $sibling->cloneNode(true);
+                                $nodesToRemove[] = $sibling;
+                            }
+                        }
+                    }
+
+                    $nodesToRemove[] = $child;
+                } else {
+                    if ($replacementNodes->count()) {
+                        $nodesToReturn[] = $this->getFlushedBuffer($replacementNodes);
+                        $replacementNodes->fromArray([]);
+                    }
+
+                    $nodesToReturn[] = $child;
                 }
-
-                $nodesToReturn[] = $child;
             }
-        }
 
-        // Flush any remaining replacementNodes left over from text nodes.
-        if ($replacementNodes->count()) {
-            $nodesToReturn[] = $this->getFlushedBuffer($replacementNodes);
-        }
-
-        // Remove potential duplicate <a> tags.
-        foreach ($nodesToReturn as $key => $return) {
-            if ($nodesToRemove->exists($return)) {
-                unset($nodesToReturn[$key]);
+            if ($replacementNodes->count()) {
+                $nodesToReturn[] = $this->getFlushedBuffer($replacementNodes);
             }
+
+            foreach ($nodesToReturn as $key => $return) {
+                if ($nodesToRemove->exists($return)) {
+                    unset($nodesToReturn[$key]);
+                }
+            }
+
+            $nodesToRemove->destroy();
+
+            return $nodesToReturn;
+        } catch (\Throwable $e) {
+            // Silently fail and return null
+            return null;
         }
-
-        $nodesToRemove->destroy();
-
-        return $nodesToReturn;
     }
 }

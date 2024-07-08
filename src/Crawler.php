@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Goose;
 
@@ -11,21 +13,24 @@ use DOMWrap\Document;
  * @package Goose
  * @license http://www.apache.org/licenses/LICENSE-2.0 Apache License 2.0
  */
-class Crawler {
+class Crawler
+{
     /** @var Configuration */
     protected $config;
 
     /**
      * @param Configuration $config
      */
-    public function __construct(Configuration $config) {
+    public function __construct(Configuration $config)
+    {
         $this->config = $config;
     }
 
     /**
      * @return Configuration
      */
-    public function config(): Configuration {
+    public function config(): Configuration
+    {
         return $this->config;
     }
 
@@ -35,7 +40,8 @@ class Crawler {
      *
      * @return Article
      */
-    public function crawl(string $url, string $rawHTML = null): ?Article {
+    public function crawl(string $url, string $rawHTML = null): ?Article
+    {
         $article = new Article();
 
         $parseCandidate = Helper::getCleanedUrl($url);
@@ -79,7 +85,8 @@ class Crawler {
      *
      * @return Document
      */
-    private function getDocument(string $rawHTML): Document {
+    private function getDocument(string $rawHTML): Document
+    {
         $doc = new Document();
         $doc->html($rawHTML);
 
@@ -92,7 +99,8 @@ class Crawler {
      *
      * @return self
      */
-    public function modules(string $category, Article $article): self {
+    public function modules(string $category, Article $article): self
+    {
         $modules = $this->config->getModules($category);
 
         foreach ($modules as $module) {
@@ -103,4 +111,3 @@ class Crawler {
         return $this;
     }
 }
-
